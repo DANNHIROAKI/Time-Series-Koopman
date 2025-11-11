@@ -104,7 +104,7 @@ def van_loan_discretization(
     expM = torch.linalg.matrix_exp(M * dt)
     Phi_T = expM[..., d:, d:]
     Phi = Phi_T.transpose(-1, -2)
-    Q_block = expM[..., d:, :d]
+    Q_block = expM[..., :d, d:]
     Qd = Phi @ Q_block
     Qd = 0.5 * (Qd + Qd.transpose(-1, -2))
     return Phi.to(torch.float32), Qd.to(torch.float32)
@@ -204,20 +204,22 @@ class TVKoopmanMoE(nn.Module):
             Sigma = sigma_gen(context)
             Phi, Qd = van_loan_discretization(A, Sigma, cfg.dt)
 
-        if collect_diagnostics or collect_regularizers:
-            A_mats.append(A)
-            Phi_mats.append(Phi)
-        if collect_diagnostics:
-            norm_A = torch.linalg.norm(A.flatten(start_dim=-2), dim=-1)
-            norm_sigma = torch.linalg.norm(
-                Sigma.flatten(start_dim=-2), dim=-1
-            )
-            rho = spectral_radius(Phi)
-            diag_norm_A.append(norm_A)
-            diag_norm_sigma.append(norm_sigma)
-            diag_rho.append(rho)
-        if collect_diagnostics or (collect_regularizers and cfg.entropy_reg_scale > 0):
-            diag_entropy.append(entropy)
+            if collect_diagnostics or collect_regularizers:
+                A_mats.append(A)
+                Phi_mats.append(Phi)
+            if collect_diagnostics:
+                norm_A = torch.linalg.norm(A.flatten(start_dim=-2), dim=-1)
+                norm_sigma = torch.linalg.norm(
+                    Sigma.flatten(start_dim=-2), dim=-1
+                )
+                rho = spectral_radius(Phi)
+                diag_norm_A.append(norm_A)
+                diag_norm_sigma.append(norm_sigma)
+                diag_rho.append(rho)
+            if collect_diagnostics or (
+                collect_regularizers and cfg.entropy_reg_scale > 0
+            ):
+                diag_entropy.append(entropy)
 
             for _ in range(steps):
                 z = torch.matmul(Phi, z.unsqueeze(-1)).squeeze(-1)
