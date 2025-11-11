@@ -50,11 +50,15 @@ def main() -> None:
         config = parse_simple_yaml(f.read())
 
     dataset_cfg = build_dataset_config(config["dataset"])
-    model_cfg = build_model_config(config["model"])
-    optim_cfg = build_optim_config(config["optim"])
-
     train_dataset = WindowedTimeSeriesDataset(dataset_cfg, split="train")
     valid_dataset = WindowedTimeSeriesDataset(dataset_cfg, split="valid")
+
+    model_cfg = build_model_config(config["model"])
+    future_dim = train_dataset.time_features.shape[-1]
+    if train_dataset.known_future is not None:
+        future_dim += train_dataset.known_future.shape[-1]
+    model_cfg.known_future_dim = future_dim
+    optim_cfg = build_optim_config(config["optim"])
 
     train_loader = DataLoader(
         train_dataset,

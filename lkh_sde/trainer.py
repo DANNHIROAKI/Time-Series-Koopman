@@ -115,7 +115,7 @@ class Trainer:
         )
         self.ema_decay = optim_config.ema
         self.ema_shadow: Optional[Dict[str, torch.Tensor]] = None
-        self._reset_ema()
+        self._reset_ema(reset=True)
         self.mse = nn.MSELoss()
         self.best_val = math.inf
         self.checkpoint_dir = (
@@ -142,15 +142,27 @@ class Trainer:
             )
         )
 
-    def _reset_ema(self) -> None:
-        if self.ema_decay > 0:
+    def _reset_ema(self, reset: bool = True) -> None:
+        if self.ema_decay <= 0:
+            self.ema_shadow = None
+            return
+        params = {
+            name: param
+            for name, param in self.model.named_parameters()
+            if param.requires_grad
+        }
+        if reset or self.ema_shadow is None:
             self.ema_shadow = {
-                name: param.data.clone()
-                for name, param in self.model.named_parameters()
-                if param.requires_grad
+                name: param.data.clone() for name, param in params.items()
             }
         else:
-            self.ema_shadow = None
+            updated = {}
+            for name, param in params.items():
+                if name in self.ema_shadow:
+                    updated[name] = self.ema_shadow[name]
+                else:
+                    updated[name] = param.data.clone()
+            self.ema_shadow = updated
 
     def _update_optimizer_parameters(self) -> None:
         params = [p for p in self.model.parameters() if p.requires_grad]
@@ -352,6 +364,7 @@ class Trainer:
         torch.save(ckpt, self.checkpoint_dir / f"epoch_{epoch}.pt")
 
     def fit(self) -> None:
+        previous_stage: Optional[int] = None
         for epoch in range(1, self.optim_config.epochs + 1):
             if epoch <= self.optim_config.stage1_epochs:
                 stage = 1
@@ -364,8 +377,11 @@ class Trainer:
                     (epoch - self.optim_config.stage1_epochs) / warmup,
                 )
             self.model.set_stage(stage, progress)
-            self._update_optimizer_parameters()
-            self._reset_ema()
+            if stage != previous_stage:
+                self._update_optimizer_parameters()
+                self._reset_ema(reset=previous_stage is None)
+            elif self.ema_decay > 0:
+                self._reset_ema(reset=False)
             train_loss, aux_losses, diagnostics = self.train_epoch(epoch)
             if self.valid_loader is not None:
                 backup = self._swap_ema_weights()
@@ -381,3 +397,4 @@ class Trainer:
             else:
                 val_loss = None
             self._log_epoch(epoch, stage, train_loss, val_loss, aux_losses, diagnostics)
+            previous_stage = stage
