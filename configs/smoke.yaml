@@ -1,0 +1,66 @@
+batch_size: 8
+
+dataset:
+  data_path: data/sample.csv
+  target_columns: ['value']
+  known_future_columns: []
+  lookback: 48
+  horizon: 12
+  stride: 1
+
+model:
+  input_dim: 1
+  output_dim: 1
+  known_future_dim: 0
+  context_dim: 32
+  latent_dim: 8
+  encoder_hidden: 64
+  encoder_layers: 1
+  koopman:
+    latent_dim: 8
+    context_dim: 32
+    num_segments: 3
+    steps_per_segment: [4, 4, 4]
+    dt: 1.0
+    num_experts: 2
+    low_rank: 2
+    horizon: 12
+    decay_target: 0.7
+    decay_scale: 0.8
+    sigma_max: 1.0
+    max_frobenius: 3.0
+    semigroup_reg_scale: 1.0
+    stitch_reg_scale: 1.0
+    entropy_reg_scale: 1.0
+  ci:
+    hidden_dim: 32
+    num_layers: 2
+    dilations: [1, 2, 4]
+    reductions: [4, 2]
+    dropout: 0.05
+  fusion:
+    max_alpha: 0.5
+    gamma: 2.0
+    gate_bias: -5.0
+
+optim:
+  lr: 0.001
+  weight_decay: 0.0001
+  gradient_clip: 1.0
+  stage1_epochs: 1
+  stage2_warmup_epochs: 1
+  epochs: 2
+  ema: 0.0
+  log_interval: 10
+  checkpoint_dir: checkpoints
+  freq_reg_weight: 0.0
+  freq_reg_topk: 0
+  freq_phase_weight: 0.0
+  semigroup_weight: 0.0
+  stitch_weight: 0.0
+  entropy_weight: 0.0
+  log_diagnostics: true
+  diagnostics_path: logs/smoke_diagnostics.jsonl
+  nll_weight: 0.0
+  crps_weight: 0.0
+  covariance_jitter: 1.0e-5
