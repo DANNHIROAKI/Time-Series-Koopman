@@ -22,10 +22,6 @@ class DatasetConfig:
     stride: int = 1
     time_feature_config: TimeFeatureConfig = field(default_factory=TimeFeatureConfig)
 
-    def future_feature_dim(self) -> int:
-        known = len(self.known_future_columns) if self.known_future_columns else 0
-        return known + self.time_feature_config.feature_dim()
-
 
 class WindowedTimeSeriesDataset(Dataset):
     def __init__(self, config: DatasetConfig, split: str = "train") -> None:

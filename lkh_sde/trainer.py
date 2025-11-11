@@ -116,7 +116,6 @@ class Trainer:
         self.ema_decay = optim_config.ema
         self.ema_shadow: Optional[Dict[str, torch.Tensor]] = None
         self._reset_ema()
-        self.current_stage = model.stage
         self.mse = nn.MSELoss()
         self.best_val = math.inf
         self.checkpoint_dir = (
@@ -364,12 +363,9 @@ class Trainer:
                     1.0,
                     (epoch - self.optim_config.stage1_epochs) / warmup,
                 )
-            stage_changed = stage != self.current_stage
             self.model.set_stage(stage, progress)
-            if stage_changed:
-                self._update_optimizer_parameters()
-                self._reset_ema()
-                self.current_stage = stage
+            self._update_optimizer_parameters()
+            self._reset_ema()
             train_loss, aux_losses, diagnostics = self.train_epoch(epoch)
             if self.valid_loader is not None:
                 backup = self._swap_ema_weights()

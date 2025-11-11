@@ -29,7 +29,7 @@ The script warms up the CI-HiTS branch for `stage1_epochs` epochs before unlocki
 ## Configuration highlights
 
 - **Dataset section** – controls window length, horizon, stride, and optional known-future feature columns. Time features (hour, day-of-week, etc.) are generated automatically.
-- **Model section** – exposes Koopman segmentation, decay target/scale, expert rank, CI-HiTS dilations and reductions, and fusion hyper-parameters including the gate bias. The known-future dimensionality is inferred automatically from the dataset configuration (time features + exogenous covariates).
+- **Model section** – exposes Koopman segmentation, decay target/scale, expert rank, CI-HiTS dilations and reductions, and fusion hyper-parameters including the gate bias.
 - **Optim section** – governs the curriculum (`stage1_epochs`, `stage2_warmup_epochs`), frequency-domain regularisation, Koopman regularisers (semigroup, stitching, entropy), probabilistic losses (`nll_weight`, `crps_weight`), EMA, diagnostics, and checkpointing.
 
 See `configs/example.yaml` for a full template covering long-horizon training with diagnostics enabled.

@@ -104,7 +104,7 @@ class CIHiTS(nn.Module):
         self.level_weights = nn.Parameter(torch.ones(len(levels)))
         self.horizon = horizon
         self.input_dim = input_dim
-        self.future_dim = int(future_dim or 0)
+        self.future_dim = future_dim or 0
         if self.future_dim > 0:
             self.future_proj = nn.Linear(self.future_dim, input_dim)
         else:
@@ -124,15 +124,10 @@ class CIHiTS(nn.Module):
         out = torch.stack(predictions, dim=0).sum(dim=0)
         out = out.transpose(1, 2)  # (batch, horizon, channels)
         if future_features is not None and future_features.numel() > 0:
-            if self.future_proj is None:
-                raise RuntimeError(
-                    "Model configured without known-future dimension but future "
-                    "features were provided."
-                )
-            if future_features.size(-1) != self.future_dim:
-                raise ValueError(
-                    f"Expected future features with dimension {self.future_dim} but "
-                    f"received {future_features.size(-1)}."
+            if self.future_proj is None or future_features.size(-1) != self.future_dim:
+                self.future_dim = future_features.size(-1)
+                self.future_proj = nn.Linear(self.future_dim, self.input_dim).to(
+                    future_features.device
                 )
             projected = self.future_proj(future_features)
             out = out + projected

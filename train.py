@@ -9,13 +9,9 @@ from lkh_sde.models.lkh_sde_v3 import CIConfig, FusionConfig, LKHSDEV3, ModelCon
 from lkh_sde.modules.koopman import KoopmanConfig
 from lkh_sde.trainer import OptimConfig, Trainer
 from lkh_sde.utils.simple_yaml import parse_simple_yaml
-from lkh_sde.utils.time_features import TimeFeatureConfig
 
 
-def build_model_config(cfg: dict, dataset_cfg: DatasetConfig) -> ModelConfig:
-    cfg = dict(cfg)
-    future_dim = dataset_cfg.future_feature_dim()
-    cfg["known_future_dim"] = future_dim
+def build_model_config(cfg: dict) -> ModelConfig:
     koopman_cfg = KoopmanConfig(**cfg["koopman"])
     ci_cfg = CIConfig(**cfg.get("ci", {}))
     fusion_cfg = FusionConfig(**cfg.get("fusion", {}))
@@ -38,10 +34,6 @@ def build_model_config(cfg: dict, dataset_cfg: DatasetConfig) -> ModelConfig:
 
 
 def build_dataset_config(cfg: dict) -> DatasetConfig:
-    cfg = dict(cfg)
-    tf_cfg = cfg.get("time_feature_config")
-    if isinstance(tf_cfg, dict):
-        cfg["time_feature_config"] = TimeFeatureConfig(**tf_cfg)
     return DatasetConfig(**cfg)
 
 
@@ -58,7 +50,7 @@ def main() -> None:
         config = parse_simple_yaml(f.read())
 
     dataset_cfg = build_dataset_config(config["dataset"])
-    model_cfg = build_model_config(config["model"], dataset_cfg)
+    model_cfg = build_model_config(config["model"])
     optim_cfg = build_optim_config(config["optim"])
 
     train_dataset = WindowedTimeSeriesDataset(dataset_cfg, split="train")

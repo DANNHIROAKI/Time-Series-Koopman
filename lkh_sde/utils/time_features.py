@@ -16,20 +16,6 @@ class TimeFeatureConfig:
     use_day_of_year: bool = True
     use_month: bool = True
 
-    def feature_dim(self) -> int:
-        """Return the dimensionality of the generated time features."""
-
-        dim = 0
-        if self.use_hour:
-            dim += 2
-        if self.use_day_of_week:
-            dim += 2
-        if self.use_day_of_year:
-            dim += 2
-        if self.use_month:
-            dim += 2
-        return dim
-
 
 def _sin_cos(values: Sequence[float], period: float) -> np.ndarray:
     angles = [2 * math.pi * v / period for v in values]
