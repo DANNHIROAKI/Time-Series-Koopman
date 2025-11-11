@@ -62,15 +62,46 @@ def make_skew_symmetric(raw: torch.Tensor) -> torch.Tensor:
     return raw - raw.transpose(-1, -2)
 
 
-def clamp_frobenius(mat: torch.Tensor, max_norm: float) -> torch.Tensor:
+def enforce_frobenius_budget(
+    mat: torch.Tensor, mu: torch.Tensor, max_norm: float
+) -> torch.Tensor:
+    """Project the deviation component onto the Frobenius ball without
+    weakening the ``-mu I`` stabiliser.
+
+    The Koopman parameterisation relies on writing ``A = (S - L L^T) - mu I``
+    with a fixed contraction term ``mu``. Simply rescaling ``A`` would shrink
+    the stabiliser as well, voiding the hard Lyapunov certificate.  Instead we
+    separate the deviation ``S - L L^T`` from the contraction piece and clip
+    only the deviation so that the final Frobenius norm stays within the
+    configured budget while preserving the ``-mu I`` magnitude.
+    """
+
     if max_norm <= 0:
         return mat
-    frob = torch.linalg.norm(mat.flatten(start_dim=-2), dim=-1)
-    scale = torch.ones_like(frob)
-    mask = frob > max_norm
-    scale[mask] = max_norm / (frob[mask] + EPS)
-    shape = scale.shape + (1, 1)
-    return mat * scale.view(*shape)
+
+    d = mat.shape[-1]
+    identity = torch.eye(d, device=mat.device, dtype=mat.dtype)
+    expand_shape = (1,) * (mat.dim() - 2) + (d, d)
+    identity = identity.view(expand_shape)
+    mu_tensor = torch.as_tensor(mu, dtype=mat.dtype, device=mat.device)
+    mu_expand = mu_tensor.view((1,) * (mat.dim() - 2)).unsqueeze(-1).unsqueeze(-1)
+    mu_term = -mu_expand * identity
+    if mu_term.shape != mat.shape:
+        mu_term = mu_term.expand_as(mat)
+
+    deviation = mat - mu_term
+    dev_norm = torch.linalg.norm(deviation.flatten(start_dim=-2), dim=-1)
+    mu_norm = torch.linalg.norm(mu_term.flatten(start_dim=-2), dim=-1)
+    max_tensor = torch.as_tensor(max_norm, dtype=mat.dtype, device=mat.device)
+    available = torch.clamp(max_tensor - mu_norm, min=0.0)
+
+    scale = torch.ones_like(dev_norm)
+    mask = (dev_norm > 0) & (available < dev_norm)
+    scale[mask] = available[mask] / (dev_norm[mask] + EPS)
+    scale = scale.clamp(min=0.0, max=1.0)
+
+    deviation = deviation * scale.unsqueeze(-1).unsqueeze(-1)
+    return deviation + mu_term
 
 
 def compute_mu(
@@ -121,6 +152,7 @@ class SegmentExpertGenerator(nn.Module):
         self.L_proj = nn.Linear(c, k * d * r)
         self.gate = nn.Linear(c, k)
         self.register_buffer("identity", torch.eye(d))
+        self.max_frobenius = config.max_frobenius
 
     def forward(
         self, context: torch.Tensor, mu: torch.Tensor, temperature: float
@@ -134,6 +166,8 @@ class SegmentExpertGenerator(nn.Module):
         LLT = torch.matmul(raw_L, raw_L.transpose(-1, -2))
         identity = self.identity.view(1, 1, d, d)
         A_experts = skew - LLT - mu.view(1, 1, 1, 1) * identity
+        if self.max_frobenius > 0:
+            A_experts = enforce_frobenius_budget(A_experts, mu, self.max_frobenius)
         gate_logits = self.gate(context)
         weights = F.softmax(gate_logits / max(temperature, EPS), dim=-1)
         entropy = -(weights * torch.log(weights + EPS)).sum(dim=-1)
@@ -200,7 +234,6 @@ class TVKoopmanMoE(nn.Module):
             self.segments, self.sigma_generators, cfg.steps_per_segment
         ):
             A, weights, entropy = segment(context, mu, self.temperature)
-            A = clamp_frobenius(A, cfg.max_frobenius)
             Sigma = sigma_gen(context)
             Phi, Qd = van_loan_discretization(A, Sigma, cfg.dt)
 
