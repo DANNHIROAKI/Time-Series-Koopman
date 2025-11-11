@@ -193,7 +193,6 @@ class TVKoopmanMoE(nn.Module):
         diag_norm_sigma: List[torch.Tensor] = []
         diag_rho: List[torch.Tensor] = []
         diag_entropy: List[torch.Tensor] = []
-        diag_gate_weights: List[torch.Tensor] = []
         A_mats: List[torch.Tensor] = []
         Phi_mats: List[torch.Tensor] = []
 
@@ -205,23 +204,20 @@ class TVKoopmanMoE(nn.Module):
             Sigma = sigma_gen(context)
             Phi, Qd = van_loan_discretization(A, Sigma, cfg.dt)
 
-            if collect_diagnostics or collect_regularizers:
-                A_mats.append(A)
-                Phi_mats.append(Phi)
-            if collect_diagnostics:
-                norm_A = torch.linalg.norm(A.flatten(start_dim=-2), dim=-1)
-                norm_sigma = torch.linalg.norm(
-                    Sigma.flatten(start_dim=-2), dim=-1
-                )
-                rho = spectral_radius(Phi)
-                diag_norm_A.append(norm_A)
-                diag_norm_sigma.append(norm_sigma)
-                diag_rho.append(rho)
-                diag_gate_weights.append(weights)
-            if collect_diagnostics or (
-                collect_regularizers and cfg.entropy_reg_scale > 0
-            ):
-                diag_entropy.append(entropy)
+        if collect_diagnostics or collect_regularizers:
+            A_mats.append(A)
+            Phi_mats.append(Phi)
+        if collect_diagnostics:
+            norm_A = torch.linalg.norm(A.flatten(start_dim=-2), dim=-1)
+            norm_sigma = torch.linalg.norm(
+                Sigma.flatten(start_dim=-2), dim=-1
+            )
+            rho = spectral_radius(Phi)
+            diag_norm_A.append(norm_A)
+            diag_norm_sigma.append(norm_sigma)
+            diag_rho.append(rho)
+        if collect_diagnostics or (collect_regularizers and cfg.entropy_reg_scale > 0):
+            diag_entropy.append(entropy)
 
             for _ in range(steps):
                 z = torch.matmul(Phi, z.unsqueeze(-1)).squeeze(-1)
@@ -230,35 +226,19 @@ class TVKoopmanMoE(nn.Module):
                     cov = Phi @ cov @ Phi.transpose(-1, -2) + Qd
                     cov = 0.5 * (cov + cov.transpose(-1, -2))
                     covariances.append(cov)
-        if states:
-            states_tensor = torch.stack(states, dim=1)
-        else:
-            states_tensor = torch.empty(
-                z.shape[0], 0, cfg.latent_dim, device=device
-            )
+
+        states_tensor = torch.stack(states, dim=1)
         output: Dict[str, torch.Tensor] = {"states": states_tensor}
-        if return_covariance and covariances:
+        if return_covariance:
             output["covariances"] = torch.stack(covariances, dim=1)
 
         if collect_diagnostics:
-            diagnostics: Dict[str, torch.Tensor] = {}
-            if diag_norm_A:
-                diagnostics["norm_A"] = torch.stack(diag_norm_A, dim=1).detach()
-            if diag_norm_sigma:
-                diagnostics["norm_sigma"] = torch.stack(
-                    diag_norm_sigma, dim=1
-                ).detach()
-            if diag_rho:
-                diagnostics["rho_phi"] = torch.stack(diag_rho, dim=1).detach()
-            if diag_entropy:
-                diagnostics["gate_entropy"] = torch.stack(
-                    diag_entropy, dim=1
-                ).detach()
-            if diag_gate_weights:
-                diagnostics["gate_weights"] = torch.stack(
-                    diag_gate_weights, dim=1
-                ).detach()
-            output["diagnostics"] = diagnostics
+            output["diagnostics"] = {
+                "norm_A": torch.stack(diag_norm_A, dim=1),
+                "norm_sigma": torch.stack(diag_norm_sigma, dim=1),
+                "rho_phi": torch.stack(diag_rho, dim=1),
+                "gate_entropy": torch.stack(diag_entropy, dim=1),
+            }
 
         if collect_regularizers:
             regularizers: Dict[str, torch.Tensor] = {}
